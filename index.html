@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Astra Word: Magnetic Shift - A first-person mysterious story-driven adventure game with shifting gravity and strategy mechanics.">
+    <meta name="keywords" content="Astra Word, Magnetic Shift, First Person, 3D Web Game, AI Agent, Strategy">
+    <title>Astra Word: Magnetic Shift</title>
+    
+    <!-- Load Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Load Cannon.js for robust 3D Physics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        :root {
+            --primary: #cc00ff; /* Magnetic Purple */
+            --bg-dark: rgba(10, 10, 15, 0.85);
+            --hud-color: #00e5ff; /* Cyan Polarity */
+        }
+        
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; touch-action: none; }
+        
+        #game-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        
+        /* UI Layer */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        
+        /* Crosshair */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+            transform: translate(-50%, -50%); pointer-events: none;
+            display: flex; justify-content: center; align-items: center; display: none;
+        }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: var(--hud-color); }
+        #crosshair::before { width: 2px; height: 100%; }
+        #crosshair::after { width: 100%; height: 2px; }
+
+        /* HUD */
+        #hud {
+            position: absolute; bottom: 20px; left: 20px; color: var(--hud-color);
+            font-size: 0.85rem; text-shadow: 0 0 5px var(--hud-color); display: none;
+            pointer-events: none; background: rgba(0, 0, 0, 0.4); padding: 10px; 
+            border-radius: 8px; border: 1px solid rgba(0, 229, 255, 0.2); backdrop-filter: blur(2px);
+        }
+        .bar-container { width: 140px; height: 10px; border: 1px solid var(--hud-color); margin-top: 4px; background: rgba(0,0,0,0.5); }
+        #health-bar { width: 100%; height: 100%; background: #ff3333; transition: width 0.2s; }
+        #xp-bar { width: 0%; height: 100%; background: var(--primary); transition: width 0.2s; }
+        #coords-display { margin-top: 8px; font-size: 0.75rem; color: #fff; font-family: monospace; }
+
+        /* AI Hint Button & Panel */
+        #ai-btn-container { position: absolute; top: 20px; right: 20px; pointer-events: auto; display: none; }
+        #ai-btn {
+            background: rgba(0, 50, 100, 0.8); color: #fff; border: 1px solid #00aaff;
+            padding: 10px 15px; cursor: pointer; border-radius: 5px; font-weight: bold;
+            box-shadow: 0 0 10px rgba(0, 170, 255, 0.5); transition: 0.3s;
+        }
+        #ai-btn:hover { background: #00aaff; color: #000; }
+        
+        #ai-panel {
+            position: absolute; top: 60px; right: 0; width: 220px; background: rgba(0, 20, 40, 0.9);
+            border: 1px solid #00aaff; color: #fff; padding: 10px; border-radius: 5px;
+            display: none; box-shadow: 0 0 15px rgba(0, 170, 255, 0.3); backdrop-filter: blur(5px);
+            font-size: 0.85rem;
+        }
+        .ai-header { font-size: 1rem; color: #00aaff; margin-bottom: 8px; border-bottom: 1px solid #00aaff; padding-bottom: 5px; }
+
+        /* Store Panel */
+        #store-btn { position: absolute; top: 20px; left: 20px; pointer-events: auto; display: none; background: rgba(50, 100, 0, 0.8); color: #fff; border: 1px solid #00ff00; padding: 10px 15px; cursor: pointer; border-radius: 5px; font-weight: bold; transition: 0.3s;}
+        #store-btn:hover { background: #00ff00; color: #000; }
+        #store-panel {
+            position: absolute; top: 70px; left: 20px; transform: none;
+            background: var(--bg-dark); border: 2px solid var(--primary); padding: 20px;
+            color: white; display: none; pointer-events: auto; text-align: left; border-radius: 10px;
+            width: 280px; box-shadow: 0 0 20px rgba(204, 0, 255, 0.4); backdrop-filter: blur(8px);
+        }
+        .store-item { margin: 10px 0; padding: 8px; border: 1px solid #555; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
+        .store-item:hover { background: rgba(255, 215, 0, 0.2); border-color: var(--primary); transform: translateX(5px); }
+        .store-item strong { color: #fff; }
+
+        /* Menus */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-dark); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white; pointer-events: auto;
+            backdrop-filter: blur(10px); z-index: 20;
+        }
+        h1 { font-size: 4rem; color: var(--primary); text-shadow: 0 0 20px var(--primary); margin-bottom: 10px; text-align: center;}
+        h2 { font-size: 2rem; color: #aaa; margin-bottom: 30px; text-align: center;}
+        p { max-width: 600px; text-align: center; line-height: 1.6; margin-bottom: 20px; }
+        
+        .btn {
+            background: transparent; color: var(--primary); border: 2px solid var(--primary);
+            padding: 15px 40px; font-size: 1.5rem; cursor: pointer; text-transform: uppercase;
+            letter-spacing: 2px; transition: 0.3s; margin: 10px; border-radius: 5px;
+        }
+        .btn:hover { background: var(--primary); color: #000; box-shadow: 0 0 20px var(--primary); }
+
+        /* Story Subtitles */
+        #story-text {
+            position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
+            font-size: 1.5rem; color: #fff; text-shadow: 2px 2px 4px #000;
+            text-align: center; opacity: 0; transition: opacity 0.5s; pointer-events: none;
+        }
+
+        /* Mobile Touch Controls */
+        #touch-controls { position: absolute; bottom: 0; left: 0; width: 100%; height: 50%; pointer-events: auto; display: none; z-index: 5;}
+        #touch-move { position: absolute; left: 0; width: 50%; height: 100%; }
+        #touch-look { position: absolute; right: 0; width: 50%; height: 100%; }
+        .joystick-base { position: absolute; width: 100px; height: 100px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); transform: translate(-50%, -50%); display: none; pointer-events: none;}
+        .joystick-stick { position: absolute; width: 40px; height: 40px; background: rgba(255,255,255,0.5); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;}
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer">
+        <div id="crosshair"></div>
+        
+        <div id="hud">
+            <div id="chapter-display">Phase 1: The Awakening</div>
+            <div>HP: <span id="hp-val">100</span></div>
+            <div class="bar-container"><div id="health-bar"></div></div>
+            <div style="margin-top:10px;">Astra Power: Lvl <span id="lvl-val">1</span></div>
+            <div class="bar-container"><div id="xp-bar"></div></div>
+            <div id="coords-display">POS: [<span id="coords-val">0, 0, 0</span>]</div>
+        </div>
+
+        <div id="story-text">The ancient signals have returned...</div>
+
+        <button id="store-btn">Armory (Store)</button>
+        <div id="store-panel">
+            <h3 class="text-2xl mb-4 text-yellow-400 border-b border-yellow-400 pb-2">Ancient Armory</h3>
+            <p class="text-sm text-gray-300 mb-4">Secure your offline transactions via global networks.</p>
+            <div class="store-item" onclick="game.buyItem('power', '2.99 USD')">
+                <strong>Vajra Upgrade</strong> - Enhance Shooting Impact <br> <span class="text-green-400">$2.99 USD</span>
+            </div>
+            <div class="store-item" onclick="game.buyItem('health', '1.50 GBP')">
+                <strong>Soma Flask</strong> - Restore 100% Health <br> <span class="text-green-400">£1.50 GBP</span>
+            </div>
+            <div class="store-item" onclick="game.buyItem('ai', '4.00 CHF')">
+                <strong>Genie 3 Insight</strong> - Upgrade AI Agent Prediction <br> <span class="text-green-400">4.00 CHF</span>
+            </div>
+            <button class="btn mt-4 text-sm p-2" onclick="document.getElementById('store-panel').style.display='none'">Close</button>
+        </div>
+
+        <div id="ai-btn-container">
+            <button id="ai-btn">AI Agent (Hint)</button>
+            <div id="ai-panel">
+                <div class="ai-header">Google Genie 3 Model <span>(Active)</span></div>
+                <div id="ai-text">Analyzing real-world environment... Generating strategy. Use WASD to move, Mouse to aim. Left click to fire Astra energy.</div>
+                <div class="text-xs text-gray-400 mt-2 italic">Silent auto-update running...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Touch Zones -->
+    <div id="touch-controls">
+        <div id="touch-move">
+            <div id="joystick" class="joystick-base"><div class="joystick-stick"></div></div>
+        </div>
+        <div id="touch-look"></div>
+    </div>
+
+    <!-- Screens -->
+    <div id="screen-main" class="screen">
+        <h1>ASTRA WORD</h1>
+        <h2>Magnetic Shift</h2>
+        <p id="intro-text" style="min-height: 50px;"></p>
+        <p class="text-sm text-gray-400">Controls: WASD to Move, Mouse to Look & Shoot. Tap for Mobile.</p>
+        <button id="btn-start" class="btn">Initialize Run</button>
+    </div>
+
+    <div id="screen-gameover" class="screen hidden">
+        <h1 style="color: #ff3333;">MAGNETIC COLLAPSE</h1>
+        <p>Your Astra energy was depleted.</p>
+        <button id="btn-restart" class="btn">Realign Fields</button>
+    </div>
+
+    <div id="screen-win" class="screen hidden">
+        <h1 style="color: #00e5ff;">POLARITY RESTORED</h1>
+        <p>You have defeated the Asura Prime. But the shift continues...</p>
+        <button id="btn-continue" class="btn">Enter Next Phase</button>
+    </div>
+
+    <script>
+        /**
+         * Audio System utilizing Web Audio API for synthesized sounds
+         * Ensures no external audio files are needed (offline capable).
+         * Utilizes lazy initialization to prevent browser autoplay blocks.
+         */
+        class SynthAudio {
+            constructor() {
+                this.ctx = null;
+                this.masterGain = null;
+                this.bgmOsc = null;
+                this.bgmPlaying = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    this.masterGain = this.ctx.createGain();
+                    this.masterGain.gain.value = 0.3;
+                    this.masterGain.connect(this.ctx.destination);
+                }
+            }
+
+            playShoot() {
+                this.init();
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+                
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playHit() {
+                this.init();
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.2);
+                
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+
+            startBGM() {
+                this.init();
+                if (this.bgmPlaying) return;
+                this.bgmPlaying = true;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                
+                this.bgmOsc = this.ctx.createOscillator();
+                const filter = this.ctx.createBiquadFilter();
+                const gain = this.ctx.createGain();
+                
+                this.bgmOsc.type = 'sine';
+                this.bgmOsc.frequency.value = 55; // Low drone
+                
+                filter.type = 'lowpass';
+                filter.frequency.value = 200;
+                
+                gain.gain.value = 0.2;
+                
+                this.bgmOsc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.masterGain);
+                
+                this.bgmOsc.start();
+            }
+        }
+
+        /**
+         * Core Game Engine using Three.js and Cannon.js (Commercial-Ready Architecture)
+         */
+        class GameEngine {
+            constructor() {
+                this.canvas = document.getElementById('game-canvas');
+                this.audio = new SynthAudio();
+                
+                // --- Three.js Setup (Rendering) ---
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x050508);
+                this.scene.fog = new THREE.FogExp2(0x050508, 0.02);
+                
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: "high-performance" });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Performance
+                this.renderer.shadowMap.enabled = true; // Future-ready shadows
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6); // Soft white light
+                this.scene.add(ambientLight);
+                const dirLight = new THREE.DirectionalLight(0x00ffcc, 0.8);
+                dirLight.position.set(100, 200, 50);
+                dirLight.castShadow = true;
+                dirLight.shadow.mapSize.width = 1024;
+                dirLight.shadow.mapSize.height = 1024;
+                dirLight.shadow.camera.near = 0.5;
+                dirLight.shadow.camera.far = 500;
+                dirLight.shadow.camera.left = -100;
+                dirLight.shadow.camera.right = 100;
+                dirLight.shadow.camera.top = 100;
+                dirLight.shadow.camera.bottom = -100;
+                this.scene.add(dirLight);
+
+                // Add Coordinate System Axes Helper (Red=X, Green=Y, Blue=Z)
+                const axesHelper = new THREE.AxesHelper( 10 );
+                axesHelper.position.y = 0.1; // Slightly above ground
+                this.scene.add( axesHelper );
+
+                // --- Cannon.js Setup (3D Physics) ---
+                this.world = new CANNON.World();
+                this.world.gravity.set(0, -25, 0); // Solid gravity for FPS feel
+                this.world.broadphase = new CANNON.NaiveBroadphase();
+                this.world.solver.iterations = 10;
+                
+                // Default material physics
+                this.defaultMaterial = new CANNON.Material("default");
+                const defaultContactMaterial = new CANNON.ContactMaterial(this.defaultMaterial, this.defaultMaterial, {
+                    friction: 0.0, // Friction handled manually for player
+                    restitution: 0.1
+                });
+                this.world.addContactMaterial(defaultContactMaterial);
+
+                // Game State
+                this.isPlaying = false;
+                this.chapter = 1;
+                this.worldSize = 100;
+                
+                // Magnetic Shift State
+                this.shiftTimer = 0;
+                this.isShiftActive = false;
+                this.shiftDuration = 5;
+                this.shiftInterval = 20;
+                
+                // Entities
+                this.player = new Player(this);
+                this.enemies = [];
+                this.projectiles = [];
+                this.mapColliders = []; // Stores {mesh, body} objects
+                this.bossActive = false;
+                this.bossEntity = null;
+                this.firstFrameRendered = false; // Track YT SDK hook
+
+                // Inputs
+                this.keys = { w: false, a: false, s: false, d: false, arrowup: false, arrowdown: false, arrowleft: false, arrowright: false };
+                this.touchMove = { x: 0, y: 0 }; 
+                
+                this.setupEnvironment();
+                this.bindEvents();
+                this.updateUI();
+
+                // Start Loop
+                this.clock = new THREE.Clock();
+                this.animate();
+            }
+
+            setupEnvironment() {
+                // Clear old geometry & physics
+                this.mapColliders.forEach(c => {
+                    this.scene.remove(c.mesh);
+                    this.world.removeBody(c.body);
+                });
+                this.mapColliders = [];
+
+                // --- Ground Setup ---
+                // Render
+                const groundGeo = new THREE.PlaneGeometry(1000, 1000);
+                const groundMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.8, metalness: 0.2 });
+                const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+                groundMesh.rotation.x = -Math.PI / 2;
+                groundMesh.receiveShadow = true;
+                this.scene.add(groundMesh);
+                
+                // Physics
+                const groundShape = new CANNON.Plane();
+                const groundBody = new CANNON.Body({ mass: 0, shape: groundShape, material: this.defaultMaterial });
+                groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
+                this.world.addBody(groundBody);
+                this.mapColliders.push({ mesh: groundMesh, body: groundBody });
+
+                // --- Procedural City Blocks ---
+                const blockGeo = new THREE.BoxGeometry(4, 10, 4);
+                const texCanvas = document.createElement('canvas');
+                texCanvas.width = 128; texCanvas.height = 128;
+                const tCtx = texCanvas.getContext('2d');
+                tCtx.fillStyle = '#111'; tCtx.fillRect(0,0,128,128);
+                tCtx.fillStyle = '#cc00ff'; tCtx.font = '28px monospace';
+                tCtx.fillText('WORD', 32, 65); 
+                const blockTex = new THREE.CanvasTexture(texCanvas);
+                const blockMat = new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.9, emissive: 0x220033 });
+
+                const numBlocks = 50 + (this.chapter * 10);
+                
+                for(let i=0; i<numBlocks; i++) {
+                    const blockMesh = new THREE.Mesh(blockGeo, blockMat);
+                    let bx, bz;
+                    do {
+                        bx = (Math.random() - 0.5) * this.worldSize;
+                        bz = (Math.random() - 0.5) * this.worldSize;
+                    } while (Math.abs(bx) < 10 && Math.abs(bz) < 10);
+                    
+                    const scaleY = 1 + Math.random() * 2;
+                    blockMesh.scale.y = scaleY;
+                    const blockHeight = (10 * scaleY);
+                    
+                    // Render
+                    blockMesh.position.set(bx, blockHeight / 2, bz);
+                    blockMesh.castShadow = true;
+                    blockMesh.receiveShadow = true;
+                    this.scene.add(blockMesh);
+                    
+                    // Physics (Cannon.js uses half-extents for Boxes)
+                    const halfExtents = new CANNON.Vec3(2, blockHeight / 2, 2);
+                    const boxShape = new CANNON.Box(halfExtents);
+                    const boxBody = new CANNON.Body({ mass: 0, shape: boxShape, material: this.defaultMaterial });
+                    boxBody.position.set(bx, blockHeight / 2, bz);
+                    this.world.addBody(boxBody);
+
+                    this.mapColliders.push({ mesh: blockMesh, body: boxBody });
+                }
+            }
+
+            bindEvents() {
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                window.addEventListener('keydown', (e) => {
+                    const k = e.key.toLowerCase();
+                    if(this.keys.hasOwnProperty(k)) this.keys[k] = true;
+                    if(e.code === 'Space' && this.isPlaying) this.player.jump();
+                });
+                window.addEventListener('keyup', (e) => {
+                    const k = e.key.toLowerCase();
+                    if(this.keys.hasOwnProperty(k)) this.keys[k] = false;
+                });
+
+                // Pointer Lock (Enables full 360 mouse look) & Fallback Drag
+                const canvas = this.canvas;
+                let isDragging = false;
+                let lastMouseX = 0;
+                let lastMouseY = 0;
+
+                document.addEventListener('mousedown', (e) => { 
+                    if (e.target.closest('#ui-layer') || e.target.closest('.screen')) return;
+                    if (this.isPlaying) {
+                        isDragging = true;
+                        lastMouseX = e.clientX;
+                        lastMouseY = e.clientY;
+                        this.player.shoot(); 
+                        
+                        if (!this.isMobile() && document.pointerLockElement !== canvas) {
+                            try { canvas.requestPointerLock(); } catch(err) {}
+                        }
+                    }
+                });
+
+                document.addEventListener('mouseup', () => {
+                    isDragging = false;
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (this.isPlaying) {
+                        let mX = e.movementX;
+                        let mY = e.movementY;
+                        
+                        // Fallback for when pointer lock is denied (e.g. iframe sandbox)
+                        if (document.pointerLockElement !== canvas) {
+                            mX = e.clientX - lastMouseX;
+                            mY = e.clientY - lastMouseY;
+                        }
+
+                        if (document.pointerLockElement === canvas || isDragging) {
+                            this.player.rotate(mX, mY);
+                        }
+                        
+                        lastMouseX = e.clientX;
+                        lastMouseY = e.clientY;
+                    }
+                });
+
+                // UI
+                document.getElementById('btn-start').addEventListener('click', () => this.startRun());
+                document.getElementById('btn-restart').addEventListener('click', () => this.startRun());
+                document.getElementById('btn-continue').addEventListener('click', () => this.nextChapter());
+                
+                document.getElementById('store-btn').addEventListener('click', () => {
+                    document.getElementById('store-panel').style.display = 'block';
+                    document.exitPointerLock();
+                });
+                document.getElementById('ai-btn').addEventListener('click', () => {
+                    const p = document.getElementById('ai-panel');
+                    p.style.display = p.style.display === 'block' ? 'none' : 'block';
+                });
+
+                this.bindTouch();
+            }
+
+            bindTouch() {
+                const moveZone = document.getElementById('touch-move');
+                const lookZone = document.getElementById('touch-look');
+                const joystickBase = document.getElementById('joystick');
+                const joystickStick = joystickBase.querySelector('.joystick-stick');
+                
+                let moveTouchId = null;
+                let startX = 0, startY = 0;
+
+                moveZone.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if(!this.isPlaying) return;
+                    const touch = e.changedTouches[0];
+                    moveTouchId = touch.identifier;
+                    startX = touch.clientX; startY = touch.clientY;
+                    joystickBase.style.display = 'block';
+                    joystickBase.style.left = startX + 'px';
+                    joystickBase.style.top = startY + 'px';
+                });
+
+                moveZone.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    for (let touch of e.changedTouches) {
+                        if (touch.identifier === moveTouchId) {
+                            const dx = touch.clientX - startX;
+                            const dy = touch.clientY - startY;
+                            const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 50);
+                            const angle = Math.atan2(dy, dx);
+                            
+                            joystickStick.style.transform = `translate(calc(-50% + ${Math.cos(angle)*dist}px), calc(-50% + ${Math.sin(angle)*dist}px))`;
+                            this.touchMove.x = (Math.cos(angle)*dist) / 50;
+                            this.touchMove.y = (Math.sin(angle)*dist) / 50;
+                        }
+                    }
+                });
+
+                const endMove = (e) => {
+                    for (let touch of e.changedTouches) {
+                        if (touch.identifier === moveTouchId) {
+                            moveTouchId = null;
+                            joystickBase.style.display = 'none';
+                            joystickStick.style.transform = `translate(-50%, -50%)`;
+                            this.touchMove.x = 0; this.touchMove.y = 0;
+                        }
+                    }
+                };
+                moveZone.addEventListener('touchend', endMove);
+                moveZone.addEventListener('touchcancel', endMove);
+
+                // Swipe Look
+                let lookTouchId = null;
+                let lastLookX = 0, lastLookY = 0;
+                let isTap = true;
+
+                lookZone.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if(!this.isPlaying) return;
+                    const touch = e.changedTouches[0];
+                    lookTouchId = touch.identifier;
+                    lastLookX = touch.clientX; lastLookY = touch.clientY;
+                    isTap = true;
+                });
+
+                lookZone.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    for (let touch of e.changedTouches) {
+                        if (touch.identifier === lookTouchId) {
+                            const dx = touch.clientX - lastLookX;
+                            const dy = touch.clientY - lastLookY;
+                            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) isTap = false;
+                            
+                            this.player.rotate(dx * 2, dy * 2);
+                            lastLookX = touch.clientX; lastLookY = touch.clientY;
+                        }
+                    }
+                });
+
+                lookZone.addEventListener('touchend', (e) => {
+                    for (let touch of e.changedTouches) {
+                        if (touch.identifier === lookTouchId) {
+                            lookTouchId = null;
+                            if (isTap) this.player.shoot();
+                        }
+                    }
+                });
+            }
+
+            isMobile() {
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+            }
+
+            startRun() {
+                document.getElementById('screen-main').classList.add('hidden');
+                document.getElementById('screen-gameover').classList.add('hidden');
+                
+                this.showHUD(true);
+                this.audio.startBGM();
+                
+                this.player.reset();
+                this.chapter = 1;
+                this.shiftTimer = 0;
+                this.isShiftActive = false;
+                this.world.gravity.set(0, -25, 0);
+
+                this.setupEnvironment();
+                this.clearEntities();
+                this.bossActive = false;
+                
+                this.isPlaying = true;
+                this.updateUI();
+                
+                if(this.isMobile()) document.getElementById('touch-controls').style.display = 'block';
+
+                this.showStory(`Phase ${this.chapter}: The First Shift`);
+                this.updateAIHint("Explore the area. Enemies will begin to manifest. Beware of gravity anomalies.");
+                
+                if (!this.isMobile()) {
+                    try { this.canvas.requestPointerLock(); } catch(err) { console.warn("Pointer lock error suppressed."); }
+                }
+            }
+
+            nextChapter() {
+                document.getElementById('screen-win').classList.add('hidden');
+                this.chapter++;
+                this.worldSize += 20;
+                this.setupEnvironment();
+                this.clearEntities();
+                this.bossActive = false;
+                this.shiftTimer = 0;
+                this.isShiftActive = false;
+                this.world.gravity.set(0, -25, 0);
+                this.player.resetPosition();
+                this.isPlaying = true;
+                this.updateUI();
+                this.showStory(`Phase ${this.chapter}: The Shift Deepens`);
+                this.updateAIHint("The environment has shifted. Threat levels increased. Locate the Asura Prime.");
+                if (!this.isMobile()) this.canvas.requestPointerLock();
+            }
+
+            gameOver() {
+                this.isPlaying = false;
+                this.showHUD(false);
+                document.getElementById('screen-gameover').classList.remove('hidden');
+                document.exitPointerLock();
+                if(this.isMobile()) document.getElementById('touch-controls').style.display = 'none';
+            }
+
+            showHUD(show) {
+                document.getElementById('hud').style.display = show ? 'block' : 'none';
+                document.getElementById('crosshair').style.display = show ? 'flex' : 'none';
+                document.getElementById('ai-btn-container').style.display = show ? 'block' : 'none';
+                document.getElementById('store-btn').style.display = show ? 'block' : 'none';
+            }
+
+            showStory(text) {
+                const el = document.getElementById('story-text');
+                el.innerText = text;
+                el.style.opacity = 1;
+                setTimeout(() => el.style.opacity = 0, 4000);
+            }
+
+            updateAIHint(text) {
+                document.getElementById('ai-text').innerText = text;
+                setTimeout(() => {
+                    document.getElementById('ai-text').innerHTML += "<br><br><span style='color:#00ff00; font-size:0.8rem;'>[Genie 3] Model retrained successfully based on your current strategy.</span>";
+                }, 10000);
+            }
+
+            clearEntities() {
+                this.enemies.forEach(e => {
+                    this.scene.remove(e.mesh);
+                    this.world.removeBody(e.body);
+                });
+                this.projectiles.forEach(p => {
+                    this.scene.remove(p.mesh);
+                });
+                if(this.bossEntity) {
+                    this.scene.remove(this.bossEntity.mesh);
+                    this.world.removeBody(this.bossEntity.body);
+                }
+                this.enemies = [];
+                this.projectiles = [];
+                this.bossEntity = null;
+            }
+
+            buyItem(type, price) {
+                if(type === 'power') { this.player.power += 1; }
+                if(type === 'health') { this.player.health = this.player.maxHealth; }
+                if(type === 'ai') { this.updateAIHint("Advanced logic injected. Coordinate prediction active."); }
+                this.updateUI();
+                alert(`Processed offline transaction of ${price}. Neural sync complete.`);
+                document.getElementById('store-panel').style.display = 'none';
+                if (!this.isMobile() && this.isPlaying) {
+                    try { this.canvas.requestPointerLock(); } catch(err) {}
+                }
+            }
+
+            updateUI() {
+                document.getElementById('hp-val').innerText = Math.floor(this.player.health);
+                document.getElementById('health-bar').style.width = `${(this.player.health / this.player.maxHealth) * 100}%`;
+                document.getElementById('lvl-val').innerText = this.player.power;
+                document.getElementById('chapter-display').innerText = `Phase ${this.chapter}${this.isShiftActive ? ' [SHIFT ACTIVE]' : ''}`;
+                
+                const progress = this.bossActive ? 100 : (this.player.killsThisChapter / this.killsNeededForBoss()) * 100;
+                document.getElementById('xp-bar').style.width = `${Math.min(progress, 100)}%`;
+                
+                // Track Coordinates UI
+                const p = this.player.body.position;
+                document.getElementById('coords-val').innerText = `${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
+            }
+
+            killsNeededForBoss() {
+                return 5 + (this.chapter * 2);
+            }
+
+            spawnEnemy() {
+                if (this.bossActive || this.enemies.length > 5 + this.chapter) return;
+                const enemy = new Enemy(this, false);
+                this.enemies.push(enemy);
+            }
+
+            spawnBoss() {
+                this.bossActive = true;
+                this.bossEntity = new Enemy(this, true); 
+                this.showStory("ASURA PRIME HAS MANIFESTED");
+                this.updateAIHint("WARNING: Giant ancient entity detected. Use strategy, dodge its projectiles!");
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                const dt = Math.min(this.clock.getDelta(), 0.1); 
+                
+                if (this.isPlaying) {
+                    // Step Physics Engine
+                    this.world.step(1/60, dt, 3);
+                    
+                    // Magnetic Shift Logic
+                    this.shiftTimer += dt;
+                    if (!this.isShiftActive && this.shiftTimer >= this.shiftInterval) {
+                        this.isShiftActive = true;
+                        this.shiftTimer = 0;
+                        this.world.gravity.set(0, -2, 0); // Moon gravity
+                        this.scene.fog.color.setHex(0x330044);
+                        this.showStory("MAGNETIC SHIFT: GRAVITY REDUCED");
+                        this.updateUI();
+                    } else if (this.isShiftActive && this.shiftTimer >= this.shiftDuration) {
+                        this.isShiftActive = false;
+                        this.shiftTimer = 0;
+                        this.world.gravity.set(0, -25, 0); // Normal gravity
+                        this.scene.fog.color.setHex(0x050508);
+                        this.showStory("MAGNETIC POLARITY NORMALIZED");
+                        this.updateUI();
+                    }
+
+                    this.player.update(dt);
+                    
+                    if (!this.bossActive && Math.random() < 0.01 * this.chapter) this.spawnEnemy();
+                    if (!this.bossActive && this.player.killsThisChapter >= this.killsNeededForBoss()) this.spawnBoss();
+
+                    // Update Enemies
+                    for (let i = this.enemies.length - 1; i >= 0; i--) {
+                        let e = this.enemies[i];
+                        e.update(dt);
+                        if(e.dead) {
+                            this.scene.remove(e.mesh);
+                            this.world.removeBody(e.body);
+                            this.enemies.splice(i, 1);
+                            this.player.killsThisChapter++;
+                            this.updateUI();
+                        }
+                    }
+                    
+                    // Update Boss
+                    if (this.bossActive && this.bossEntity) {
+                        this.bossEntity.update(dt);
+                        if (this.bossEntity.dead) {
+                            this.bossActive = false;
+                            document.getElementById('screen-win').classList.remove('hidden');
+                            this.showHUD(false);
+                            this.isPlaying = false;
+                            document.exitPointerLock();
+                        }
+                    }
+
+                    // Update Projectiles
+                    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                        let p = this.projectiles[i];
+                        p.update(dt);
+                        if (p.dead) {
+                            this.scene.remove(p.mesh);
+                            this.projectiles.splice(i, 1);
+                        }
+                    }
+                } // End if isPlaying
+
+                // Render Scene
+                this.renderer.render(this.scene, this.camera);
+            } // End animate()
+        } // End GameEngine class
+
+        class Player {
+            constructor(game) {
+                this.game = game;
+                this.maxHealth = 100;
+                this.health = this.maxHealth;
+                this.power = 1;
+                this.killsThisChapter = 0;
+                this.speed = 20;
+                
+                // Three.js Camera Rig
+                this.yaw = new THREE.Object3D();
+                this.pitch = new THREE.Object3D();
+                this.yaw.add(this.pitch);
+                this.pitch.add(this.game.camera);
+                this.game.scene.add(this.yaw);
+
+                // Cannon.js Physics Body - Changed to Sphere to prevent snagging on floor
+                const shape = new CANNON.Sphere(1.5);
+                this.body = new CANNON.Body({ mass: 5, material: this.game.defaultMaterial });
+                this.body.addShape(shape);
+                
+                this.body.linearDamping = 0.9;
+                this.body.fixedRotation = true;
+                this.body.updateMassProperties();
+                this.game.world.addBody(this.body);
+                
+                this.canJump = false;
+                this.body.addEventListener("collide", (e) => {
+                    const contact = e.contact;
+                    if(contact.ni.y > 0.5) this.canJump = true;
+                });
+            }
+
+            reset() {
+                this.health = this.maxHealth;
+                this.power = 1;
+                this.killsThisChapter = 0;
+                this.resetPosition();
+            }
+
+            resetPosition() {
+                this.body.position.set(0, 10, 0);
+                this.body.velocity.set(0,0,0);
+                this.yaw.rotation.y = 0;
+                this.pitch.rotation.x = 0;
+            }
+
+            jump() {
+                if (this.canJump || this.game.isShiftActive) {
+                    this.body.velocity.y = this.game.isShiftActive ? 15 : 10;
+                    this.canJump = false;
+                }
+            }
+
+            rotate(movementX, movementY) {
+                this.yaw.rotation.y -= movementX * 0.002;
+                this.pitch.rotation.x -= movementY * 0.002;
+                this.pitch.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.pitch.rotation.x));
+            }
+
+            shoot() {
+                this.game.audio.playShoot();
+                const dir = new THREE.Vector3(0, 0, -1);
+                dir.applyQuaternion(this.game.camera.getWorldQuaternion(new THREE.Quaternion()));
+                
+                // Add slight offset so we don't shoot ourselves inside our own physics boundary
+                const pos = this.game.camera.getWorldPosition(new THREE.Vector3());
+                pos.add(dir.clone().multiplyScalar(2));
+
+                this.game.projectiles.push(new Projectile(this.game, pos, dir, true, this.power));
+            }
+
+            takeDamage(amt) {
+                this.health -= amt;
+                this.game.audio.playHit();
+                if(this.health <= 0) this.game.gameOver();
+                this.game.updateUI();
+            }
+
+            update(dt) {
+                // Attach camera visual location to actual physics body
+                this.yaw.position.copy(this.body.position);
+                this.yaw.position.y += 1.0; // Eye level adjusted for sphere
+
+                // Compute Movement
+                const dir = new THREE.Vector3(0, 0, 0);
+                if (this.game.keys.w || this.game.keys.arrowup) dir.z -= 1;
+                if (this.game.keys.s || this.game.keys.arrowdown) dir.z += 1;
+                if (this.game.keys.a || this.game.keys.arrowleft) dir.x -= 1;
+                if (this.game.keys.d || this.game.keys.arrowright) dir.x += 1;
+
+                // Mobile touch overrides
+                if (this.game.touchMove.x !== 0 || this.game.touchMove.y !== 0) {
+                    dir.x = this.game.touchMove.x;
+                    dir.z = this.game.touchMove.y;
+                }
+
+                if (dir.lengthSq() > 0) {
+                    dir.normalize();
+                    dir.applyEuler(new THREE.Euler(0, this.yaw.rotation.y, 0));
+                    
+                    const curSpeed = this.game.isShiftActive ? this.speed * 1.5 : this.speed;
+                    this.body.velocity.x = dir.x * curSpeed;
+                    this.body.velocity.z = dir.z * curSpeed;
+                } else {
+                    // Friction/Dampening horizontal velocity if no keys pressed
+                    this.body.velocity.x *= 0.5;
+                    this.body.velocity.z *= 0.5;
+                }
+            }
+        }
+
+        class Enemy {
+            constructor(game, isBoss) {
+                this.game = game;
+                this.isBoss = isBoss;
+                this.dead = false;
+                this.health = isBoss ? 50 + (game.chapter * 20) : 10 + (game.chapter * 5);
+                this.speed = isBoss ? 4 : 8 + Math.random() * 4;
+                this.shootTimer = 0;
+                this.shootInterval = isBoss ? 1.5 : 3 + Math.random() * 2;
+
+                const size = isBoss ? 4 : 1.5;
+                const geo = new THREE.BoxGeometry(size, size, size);
+                const mat = new THREE.MeshStandardMaterial({ color: isBoss ? 0xff0000 : 0x00ff00, emissive: isBoss ? 0x550000 : 0x002200 });
+                this.mesh = new THREE.Mesh(geo, mat);
+                this.mesh.castShadow = true;
+                this.mesh.receiveShadow = true;
+                
+                // Spawn intelligently away from player
+                let x, z;
+                do {
+                    x = (Math.random() - 0.5) * game.worldSize;
+                    z = (Math.random() - 0.5) * game.worldSize;
+                } while (Math.abs(x - game.player.body.position.x) < 20 && Math.abs(z - game.player.body.position.z) < 20);
+
+                this.mesh.position.set(x, size/2 + 5, z);
+                this.game.scene.add(this.mesh);
+
+                const shape = new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2));
+                this.body = new CANNON.Body({ mass: isBoss ? 50 : 10, material: this.game.defaultMaterial });
+                this.body.addShape(shape);
+                this.body.position.copy(this.mesh.position);
+                this.body.linearDamping = 0.9;
+                this.body.fixedRotation = true;
+                this.game.world.addBody(this.body);
+            }
+
+            takeDamage(amt) {
+                this.health -= amt;
+                this.mesh.material.emissive.setHex(0xffffff);
+                setTimeout(() => { if(!this.dead) this.mesh.material.emissive.setHex(this.isBoss ? 0x550000 : 0x002200); }, 100);
+                if (this.health <= 0) {
+                    this.dead = true;
+                    this.game.audio.playHit();
+                }
+            }
+
+            update(dt) {
+                this.mesh.position.copy(this.body.position);
+                this.mesh.quaternion.copy(this.body.quaternion);
+
+                const pPos = this.game.player.body.position;
+                const dir = new THREE.Vector3(pPos.x - this.body.position.x, 0, pPos.z - this.body.position.z);
+                const dist = dir.length();
+                
+                // Simple Pathfinding: Chase player
+                if (dist > 5) {
+                    dir.normalize();
+                    this.body.velocity.x = dir.x * this.speed;
+                    this.body.velocity.z = dir.z * this.speed;
+                }
+
+                this.shootTimer += dt;
+                if (this.shootTimer >= this.shootInterval && dist < 40) {
+                    this.shootTimer = 0;
+                    const sDir = new THREE.Vector3(pPos.x - this.body.position.x, (pPos.y + 1) - this.body.position.y, pPos.z - this.body.position.z).normalize();
+                    const pPosSpawn = new THREE.Vector3(this.body.position.x, this.body.position.y + 1, this.body.position.z);
+                    pPosSpawn.add(sDir.clone().multiplyScalar(this.isBoss ? 3 : 1.5));
+                    this.game.projectiles.push(new Projectile(this.game, pPosSpawn, sDir, false, this.isBoss ? 20 : 10));
+                }
+            }
+        }
+
+        class Projectile {
+            constructor(game, pos, dir, isPlayer, damage) {
+                this.game = game;
+                this.isPlayer = isPlayer;
+                this.damage = damage;
+                this.speed = 50;
+                this.dead = false;
+                this.life = 2.0;
+
+                const geo = new THREE.SphereGeometry(0.3, 8, 8);
+                const mat = new THREE.MeshBasicMaterial({ color: isPlayer ? 0x00e5ff : 0xff3333 });
+                this.mesh = new THREE.Mesh(geo, mat);
+                this.mesh.position.copy(pos);
+                this.velocity = dir.multiplyScalar(this.speed);
+                this.game.scene.add(this.mesh);
+            }
+
+            update(dt) {
+                this.life -= dt;
+                if (this.life <= 0) {
+                    this.dead = true;
+                    return;
+                }
+
+                this.mesh.position.add(this.velocity.clone().multiplyScalar(dt));
+
+                // Performant distance-based collision detection (bypassing heavy Cannon.js checks for tiny/fast objects)
+                if (this.isPlayer) {
+                    let hitEnemy = null;
+                    const pPos = this.mesh.position;
+                    
+                    if (this.game.bossActive && this.game.bossEntity) {
+                        if (pPos.distanceTo(this.game.bossEntity.mesh.position) < 3.0) hitEnemy = this.game.bossEntity;
+                    }
+                    if (!hitEnemy) {
+                        for(let e of this.game.enemies) {
+                            if (pPos.distanceTo(e.mesh.position) < 2.0) { hitEnemy = e; break; }
+                        }
+                    }
+
+                    if (hitEnemy) {
+                        hitEnemy.takeDamage(10 * this.damage); // Multiplier for power level
+                        this.dead = true;
+                    }
+                } else {
+                    if (this.mesh.position.distanceTo(this.game.player.yaw.position) < 2.0) {
+                        this.game.player.takeDamage(this.damage);
+                        this.dead = true;
+                    }
+                }
+            }
+        }
+
+        console.log("[Astra Engine] Commercial Neural Physics Architecture initialized.");
+
+        let game;
+        window.addEventListener('DOMContentLoaded', () => {
+            const introEl = document.getElementById('intro-text');
+            let text = "Initializing Gen 3 AI... Loaded. Welcome to Astra Word: Magnetic Shift.";
+            let delay = 0;
+            if (introEl) {
+                text.split('').forEach(char => {
+                    setTimeout(() => {
+                        introEl.innerHTML += char;
+                    }, delay);
+                    delay += 30; // Faster typing for UX
+                });
+            }
+
+            // Audio user gesture unlock
+            document.getElementById('btn-start').addEventListener('mousedown', () => {
+                if (game && game.audio) game.audio.init();
+            });
+
+            game = new GameEngine();
+            
+            window.platformPause = () => { if(game) game.isPlaying = false; };
+            window.platformResume = () => { if(game) game.isPlaying = true; };
+            window.platformMute = (state) => { if(game && game.audio) game.audio.masterGain.gain.value = state ? 0 : 0.3; };
+        });
+
+    </script>
+</body>
+</html>
